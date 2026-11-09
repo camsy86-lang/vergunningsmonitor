@@ -1,0 +1,46 @@
+{
+ "bron": "https://www.mercator.vlaanderen.be/raadpleegdienstenmercatorpubliek/ogc/features/v1/collections/lu:lu_omv_iioa_v2",
+ "laatste_update": "2026-11-09T10:51:44+00:00",
+ "eerste_run": "2026-11-09T10:48:13+00:00",
+ "aantal": 35250,
+ "velden": [
+  "id",
+  "projectnummer",
+  "project_type_code",
+  "inrichtingsnummer",
+  "klasse_iioa",
+  "aanvrager",
+  "exploitant",
+  "omschrijving_projecttype",
+  "datum_indiening",
+  "huidige_toestand",
+  "datum_huidige_toestand",
+  "vvo_huidige_toestand",
+  "fase_huidige_toestand",
+  "voorwerp_uuid",
+  "project_link"
+ ],
+ "rollen": {
+  "id": "id",
+  "titel": "omschrijving_projecttype",
+  "datum": "datum_indiening",
+  "status": "huidige_toestand",
+  "klasse": "klasse_iioa"
+ },
+ "runs": [
+  {
+   "tijd": "2026-11-09T10:51:44+00:00",
+   "totaal": 35250,
+   "nieuw": 0,
+   "gewijzigd": 0,
+   "verdwenen": 0
+  },
+  {
+   "tijd": "2026-11-09T10:48:13+00:00",
+   "totaal": 35250,
+   "nieuw": 0,
+   "gewijzigd": 0,
+   "verdwenen": 0
+  }
+ ]
+}

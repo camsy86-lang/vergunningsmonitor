@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vergunningsmonitor Limburg</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="alternate" type="application/rss+xml" title="Vergunningsmonitor Limburg" href="data/feed.xml">
+<style>
+  :root { color-scheme: light; --ink:#16181d; --muted:#666b75; --line:#e3e5e8; --bg:#f6f6f3; --card:#fff;
+          --accent:#c8102e; --new:#1a7f37; --chg:#b35900; --gone:#8a8f98; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--ink); color:#fff; padding:14px 22px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:19px; letter-spacing:.2px; }
+  header h1 span { color:var(--accent); }
+  header .meta { color:#b9bdc6; font-size:12.5px; }
+  header a { color:#fff; }
+  main { padding:16px 22px 40px; max-width:1500px; margin:auto; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; cursor:pointer; }
+  .kpi b { display:block; font-size:24px; font-variant-numeric:tabular-nums; }
+  .kpi small { color:var(--muted); }
+  .kpi.new b { color:var(--new); } .kpi.chg b { color:var(--chg); } .kpi.gone b { color:var(--gone); }
+  .filters { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; }
+  .filters input, .filters select { font:inherit; padding:6px 8px; border:1px solid #cfd3d8; border-radius:6px; background:#fff; }
+  .filters input[type=search] { min-width:260px; flex:1; }
+  button { font:inherit; padding:6px 11px; border:1px solid #cfd3d8; border-radius:6px; background:#fff; cursor:pointer; }
+  button:hover { border-color:var(--ink); }
+  .grid { display:grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); gap:14px; }
+  @media (max-width:1000px){ .grid { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0; padding:10px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+  #map { height:440px; }
+  .tablewrap { max-height:620px; overflow:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid #eef0f2; vertical-align:top; }
+  th { position:sticky; top:0; background:#fafafa; cursor:pointer; white-space:nowrap; user-select:none; z-index:1; }
+  th.sorted::after { content:" ▾"; } th.sorted.asc::after { content:" ▴"; }
+  tbody tr { cursor:pointer; } tbody tr:hover { background:#f4f7fb; } tr.sel { background:#fff4d6 !important; }
+  .tag { display:inline-block; font-size:11px; font-weight:600; padding:1px 6px; border-radius:10px; color:#fff; }
+  .tag.nieuw { background:var(--new);} .tag.gewijzigd { background:var(--chg);} .tag.verdwenen { background:var(--gone);}
+  #changes { max-height:440px; overflow:auto; }
+  .chg { padding:9px 14px; border-bottom:1px solid #eef0f2; cursor:pointer; }
+  .chg:hover { background:#f4f7fb; }
+  .chg .when { color:var(--muted); font-size:12px; }
+  .chg .diff { font-size:12px; color:#444; margin-top:3px; }
+  .chg .diff del { color:#a00; } .chg .diff ins { color:var(--new); text-decoration:none; }
+  #detail { padding:12px 14px; font-size:13px; }
+  #detail dl { display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; margin:0; }
+  #detail dt { color:var(--muted); } #detail dd { margin:0; word-break:break-word; }
+  .muted { color:var(--muted); }
+  .pager { padding:8px 14px; display:flex; gap:8px; align-items:center; border-top:1px solid var(--line); }
+  #err { display:none; background:#fde8e8; border:1px solid #f3b6b6; padding:12px; border-radius:8px; margin-bottom:12px; }
+  canvas { width:100% !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vergunnings<span>monitor</span> Limburg</h1>
+  <div class="meta" id="meta">laden…</div>
+  <div class="meta" style="margin-left:auto"><a href="data/feed.xml">RSS-feed</a> · <a href="#" id="dlcsv">CSV-export</a></div>
+</header>
+<main>
+  <div id="err"></div>
+  <div class="kpis">
+    <div class="kpi" data-quick="all"><b id="k-tot">–</b><small>dossiers in Limburg</small></div>
+    <div class="kpi new" data-quick="nieuw7"><b id="k-new7">–</b><small>nieuw (laatste 7 dagen)</small></div>
+    <div class="kpi new" data-quick="nieuw30"><b id="k-new30">–</b><small>nieuw (laatste 30 dagen)</small></div>
+    <div class="kpi chg" data-quick="chg30"><b id="k-chg30">–</b><small>gewijzigd (laatste 30 dagen)</small></div>
+    <div class="kpi gone"><b id="k-gone30">–</b><small>verdwenen (laatste 30 dagen)</small></div>
+  </div>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Zoek op naam, adres, nummer, exploitant… (alle velden)">
+    <select id="f-gem"><option value="">Alle gemeenten</option></select>
+    <select id="f-status"><option value="">Alle statussen</option></select>
+    <select id="f-klasse"><option value="">Alle klassen</option></select>
+    <select id="f-recent">
+      <option value="">Alle dossiers</option>
+      <option value="7">Nieuw/gewijzigd ≤ 7 dagen</option>
+      <option value="30">Nieuw/gewijzigd ≤ 30 dagen</option>
+      <option value="90">Nieuw/gewijzigd ≤ 90 dagen</option>
+    </select>
+    <button id="reset">Reset</button>
+    <span class="muted" id="count"></span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card" style="margin-bottom:14px"><h2>Kaart <span class="muted" style="text-transform:none" id="mapnote"></span></h2><div id="map"></div></div>
+      <div class="card"><h2>Dossiers</h2>
+        <div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+        <div class="pager"><button id="prev">‹</button><span id="pageinfo"></span><button id="next">›</button>
+          <span class="muted" style="margin-left:auto">Kolommen: <select id="colpick" multiple size="1" style="min-width:160px" title="Ctrl/Cmd-klik om kolommen te kiezen"></select></span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:14px"><h2>Recente wijzigingen <span><select id="chgtype" style="font-size:12px"><option value="">alle</option><option>nieuw</option><option>gewijzigd</option><option>verdwenen</option></select></span></h2><div id="changes"></div></div>
+      <div class="card" style="margin-bottom:14px"><h2>Detail</h2><div id="detail" class="muted">Klik een dossier in de tabel, op de kaart of in de wijzigingen.</div></div>
+      <div class="card"><h2>Top gemeenten (huidige selectie)</h2><div id="topgem" style="padding:8px 14px"></div></div>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(async () => {
+  const $ = s => document.querySelector(s);
+  const fmtDate = s => s ? new Date(s).toLocaleString('nl-BE', {dateStyle:'medium', timeStyle:'short'}) : '';
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const showErr = m => { const e = $('#err'); e.style.display='block'; e.innerHTML = m; };
+
+  let meta, feats, changes;
+  try {
+    const bust = '?t=' + Date.now();
+    [meta, feats, changes] = await Promise.all(['meta','features','changes'].map(n => fetch(`data/${n}.json${bust}`).then(r => { if(!r.ok) throw new Error(n+'.json: '+r.status); return r.json(); })));
+  } catch (e) {
+    showErr(`<b>Data kon niet geladen worden.</b> Is <code>monitor.py</code> al minstens één keer gedraaid? (${esc(e.message)})<br>Lokaal openen? Start dan <code>python -m http.server</code> in de map <code>docs</code> — browsers blokkeren <code>fetch()</code> vanaf <code>file://</code>.`);
+    return;
+  }
+  const R = meta.rollen || {};
+  const byKey = new Map(feats.map(f => [f.k, f]));
+  $('#meta').innerHTML = `Laatste update: <b>${fmtDate(meta.laatste_update)}</b> · monitoring sinds ${fmtDate(meta.eerste_run)} · bron: <a href="${esc(meta.bron)}">Mercator ${esc(meta.bron.split('/').pop())}</a>`;
+
+  // ---- KPI's
+  const now = Date.now(), day = 864e5;
+  const within = (iso, d) => iso && (now - new Date(iso)) <= d*day;
+  const cnt = (t, d) => changes.filter(c => c.type===t && within(c.gezien, d)).length;
+  $('#k-tot').textContent = feats.length.toLocaleString('nl-BE');
+  $('#k-new7').textContent = cnt('nieuw',7); $('#k-new30').textContent = cnt('nieuw',30);
+  $('#k-chg30').textContent = cnt('gewijzigd',30); $('#k-gone30').textContent = cnt('verdwenen',30);
+
+  // ---- filters vullen
+  const fillSel = (sel, role) => {
+    if (!R[role]) { sel.style.display='none'; return; }
+    const vals = [...new Set(feats.map(f => f.p[R[role]]).filter(v => v!==null && v!==''))].sort((a,b)=>String(a).localeCompare(String(b),'nl'));
+    vals.forEach(v => sel.add(new Option(v, v)));
+  };
+  fillSel($('#f-gem'),'gemeente'); fillSel($('#f-status'),'status'); fillSel($('#f-klasse'),'klasse');
+
+  // ---- kolommen
+  const allCols = meta.velden;
+  const preferred = ['id','titel','gemeente','adres','klasse','status','datum'].map(r => R[r]).filter(Boolean);
+  let cols = JSON.parse(localStorage.getItem('vm-cols') || 'null') || (preferred.length >= 3 ? preferred : allCols.slice(0,6));
+  allCols.forEach(c => { const o = new Option(c,c); o.selected = cols.includes(c); $('#colpick').add(o); });
+  $('#colpick').addEventListener('change', e => { cols = [...e.target.selectedOptions].map(o=>o.value); localStorage.setItem('vm-cols', JSON.stringify(cols)); render(); });
+  $('#colpick').addEventListener('focus', e => e.target.size = Math.min(12, allCols.length));
+  $('#colpick').addEventListener('blur', e => e.target.size = 1);
+
+  // ---- kaart
+  const map = L.map('map', {preferCanvas:true}).setView([51.0, 5.45], 9);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+  const cluster = L.markerClusterGroup({chunkedLoading:true, maxClusterRadius:45}); map.addLayer(cluster);
+  const statusColor = f => within(f.eg,30) ? '#1a7f37' : within(f.lw,30) ? '#b35900' : '#2b5797';
+
+  // ---- state
+  let sortCol = R.datum || null, sortAsc = false, page = 0, selKey = null, filtered = [];
+  const PAGE = 100;
+
+  function applyFilters() {
+    const q = $('#q').value.trim().toLowerCase();
+    const g = $('#f-gem').value, s = $('#f-status').value, k = $('#f-klasse').value, rec = +$('#f-recent').value;
+    filtered = feats.filter(f => {
+      if (g && String(f.p[R.gemeente]) !== g) return false;
+      if (s && String(f.p[R.status]) !== s) return false;
+      if (k && String(f.p[R.klasse]) !== k) return false;
+      if (rec && !within(f.lw, rec)) return false;
+      if (q) { f._txt ??= (f.k + ' ' + Object.values(f.p).join(' ')).toLowerCase(); if (!q.split(/\s+/).every(w => f._txt.includes(w))) return false; }
+      return true;
+    });
+    if (sortCol) {
+      const key = sortCol;
+      filtered.sort((a,b) => {
+        const x = key==='_eg' ? a.eg : a.p[key], y = key==='_eg' ? b.eg : b.p[key];
+        if (x==null) return 1; if (y==null) return -1;
+        const r = (typeof x==='number' && typeof y==='number') ? x-y : String(x).localeCompare(String(y),'nl',{numeric:true});
+        return sortAsc ? r : -r;
+      });
+    }
+    page = 0;
+    $('#count').textContent = `${filtered.length.toLocaleString('nl-BE')} van ${feats.length.toLocaleString('nl-BE')} dossiers`;
+    drawMap(); render(); drawTop();
+  }
+
+  function drawMap() {
+    cluster.clearLayers();
+    const ms = []; let nopt = 0;
+    for (const f of filtered) {
+      if (!f.pt) { nopt++; continue; }
+      const m = L.circleMarker([f.pt[1], f.pt[0]], {radius:6, weight:1, color:'#fff', fillColor:statusColor(f), fillOpacity:.9});
+      m.bindTooltip(esc(title(f))); m.on('click', () => select(f.k));
+      ms.push(m);
+    }
+    cluster.addLayers(ms);
+    $('#mapnote').textContent = `groen = nieuw ≤30d · oranje = gewijzigd ≤30d` + (nopt ? ` · ${nopt} zonder locatie` : '');
+  }
+
+  const title = f => f.p[R.titel] || f.p[R.adres] || f.k;
+  const badge = f => within(f.eg,30) && f.eg!==meta.eerste_run ? '<span class="tag nieuw">nieuw</span> ' : within(f.lw,30) && f.lw!==f.eg ? '<span class="tag gewijzigd">gewijzigd</span> ' : '';
+
+  function render() {
+    const thead = $('#tbl thead'), tbody = $('#tbl tbody');
+    const hc = [...cols, '_eg'];
+    thead.innerHTML = '<tr>' + hc.map(c => `<th data-c="${esc(c)}" class="${c===sortCol?'sorted'+(sortAsc?' asc':''):''}">${c==='_eg'?'eerst gezien':esc(c)}</th>`).join('') + '</tr>';
+    const rows = filtered.slice(page*PAGE, (page+1)*PAGE);
+    tbody.innerHTML = rows.map(f => `<tr data-k="${esc(f.k)}" class="${f.k===selKey?'sel':''}">` +
+      hc.map((c,i) => `<td>${i===0?badge(f):''}${esc(c==='_eg' ? new Date(f.eg).toLocaleDateString('nl-BE') : f.p[c])}</td>`).join('') + '</tr>').join('');
+    const pages = Math.max(1, Math.ceil(filtered.length/PAGE));
+    $('#pageinfo').textContent = `pagina ${page+1} / ${pages}`;
+  }
+  $('#tbl thead').addEventListener('click', e => { const c = e.target.dataset.c; if(!c) return; sortAsc = sortCol===c ? !sortAsc : true; sortCol = c; applyFilters(); });
+  $('#tbl tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) select(tr.dataset.k, false); });
+  $('#prev').onclick = () => { if (page>0) { page--; render(); } };
+  $('#next').onclick = () => { if ((page+1)*PAGE < filtered.length) { page++; render(); } };
+
+  function select(k, pan=true) {
+    selKey = k; location.hash = 'id=' + encodeURIComponent(k);
+    const f = byKey.get(k);
+    const hist = changes.filter(c => c.key===k);
+    let html = '';
+    if (f) {
+      html += `<h3 style="margin:0 0 8px">${esc(title(f))}</h3><dl>` +
+        Object.entries(f.p).filter(([,v]) => v!==null && v!=='').map(([a,v]) => `<dt>${esc(a)}</dt><dd>${/^https?:\/\//.test(v)?`<a href="${esc(v)}" target="_blank">${esc(v)}</a>`:esc(v)}</dd>`).join('') +
+        `<dt>eerst gezien</dt><dd>${fmtDate(f.eg)}</dd><dt>laatst gewijzigd</dt><dd>${fmtDate(f.lw)}</dd>` +
+        (f.pt ? `<dt>locatie</dt><dd><a target="_blank" href="https://www.google.com/maps?q=${f.pt[1]},${f.pt[0]}">Google Maps</a> · <a target="_blank" href="https://geopunt.be/kaart?lat=${f.pt[1]}&lon=${f.pt[0]}">Geopunt</a></dd>` : '') + '</dl>';
+      if (pan && f.pt) map.setView([f.pt[1], f.pt[0]], 15);
+    } else if (hist[0]) {
+      html += `<p><span class="tag verdwenen">niet meer in de bron</span></p><dl>` + Object.entries(hist[0].properties||{}).map(([a,v]) => `<dt>${esc(a)}</dt><dd>${esc(v)}</dd>`).join('') + '</dl>';
+    }
+    if (hist.length) html += '<h4 style="margin:14px 0 4px">Geschiedenis</h4>' + hist.map(chgHtml).join('');
+    $('#detail').classList.remove('muted'); $('#detail').innerHTML = html || 'Niet gevonden.';
+    render();
+  }
+
+  function chgHtml(c) {
+    const p = c.properties || {};
+    const t = p[R.titel] || p[R.adres] || c.key, gem = R.gemeente ? p[R.gemeente] : '';
+    const diff = c.diff ? '<div class="diff">' + Object.entries(c.diff).slice(0,6).map(([a,d]) => `${esc(a)}: <del>${esc(d.oud)}</del> → <ins>${esc(d.nieuw)}</ins>`).join('<br>') + '</div>' : '';
+    return `<div class="chg" data-k="${esc(c.key)}"><span class="tag ${c.type}">${c.type}</span> <b>${esc(t)}</b>${gem?' — '+esc(gem):''}<div class="when">${fmtDate(c.gezien)}</div>${diff}</div>`;
+  }
+  function drawChanges() {
+    const t = $('#chgtype').value;
+    const list = changes.filter(c => !t || c.type===t).slice(0,300);
+    $('#changes').innerHTML = list.length ? list.map(chgHtml).join('') : '<p class="muted" style="padding:10px 14px">Nog geen wijzigingen geregistreerd. De eerste run legt de basislijn vast; vanaf de tweede run verschijnen hier nieuwe en gewijzigde dossiers.</p>';
+  }
+  $('#changes').addEventListener('click', e => { const d = e.target.closest('.chg'); if (d) select(d.dataset.k); });
+  $('#detail').addEventListener('click', e => { const d = e.target.closest('.chg'); if (d) select(d.dataset.k); });
+  $('#chgtype').onchange = drawChanges;
+
+  function drawTop() {
+    if (!R.gemeente) { $('#topgem').innerHTML = '<span class="muted">Geen gemeenteveld herkend.</span>'; return; }
+    const c = {}; filtered.forEach(f => { const g = f.p[R.gemeente] || '?'; c[g] = (c[g]||0)+1; });
+    const top = Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,12), max = top[0]?.[1]||1;
+    $('#topgem').innerHTML = top.map(([g,n]) => `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;cursor:pointer" data-g="${esc(g)}"><span style="width:150px">${esc(g)}</span><span style="flex:1;background:#eef0f2;border-radius:3px"><span style="display:block;height:12px;width:${n/max*100}%;background:var(--accent);border-radius:3px"></span></span><span style="width:50px;text-align:right">${n}</span></div>`).join('');
+  }
+  $('#topgem').addEventListener('click', e => { const d = e.target.closest('[data-g]'); if (d) { $('#f-gem').value = d.dataset.g; applyFilters(); } });
+
+  // ---- events
+  let tmr; $('#q').addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(applyFilters, 200); });
+  ['#f-gem','#f-status','#f-klasse','#f-recent'].forEach(s => $(s).addEventListener('change', applyFilters));
+  $('#reset').onclick = () => { $('#q').value=''; ['#f-gem','#f-status','#f-klasse','#f-recent'].forEach(s => $(s).value=''); applyFilters(); };
+  document.querySelectorAll('.kpi[data-quick]').forEach(k => k.onclick = () => {
+    const v = k.dataset.quick; $('#f-recent').value = v==='nieuw7'?'7':(v==='all'?'':'30'); applyFilters();
+    if (v !== 'all') { $('#chgtype').value = v.startsWith('nieuw')?'nieuw':'gewijzigd'; drawChanges(); }
+  });
+
+  $('#dlcsv').onclick = e => {
+    e.preventDefault();
+    const hdr = ['sleutel', ...allCols, 'eerst_gezien', 'laatst_gewijzigd', 'lon', 'lat'];
+    const q = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+    const lines = [hdr.map(q).join(';'), ...filtered.map(f => [f.k, ...allCols.map(c => f.p[c]), f.eg, f.lw, f.pt?.[0], f.pt?.[1]].map(q).join(';'))];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv'}));
+    a.download = `vergunningen-limburg-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  };
+
+  drawChanges(); applyFilters();
+  const m = location.hash.match(/id=([^&]+)/); if (m) select(decodeURIComponent(m[1]));
+})();
+</script>
+</body>
+</html>
